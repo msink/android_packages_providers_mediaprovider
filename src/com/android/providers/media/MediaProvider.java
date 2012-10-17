@@ -42,6 +42,7 @@ import android.media.MediaScanner;
 import android.media.MiniThumbFile;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.Environment;
 import android.os.FileUtils;
 import android.os.Handler;
@@ -173,6 +174,8 @@ public class MediaProvider extends ContentProvider {
     private static final class DatabaseHelper extends SQLiteOpenHelper {
         final Context mContext;
         final boolean mInternal;  // True if this is the internal database
+
+        public boolean scannerTransaction = false;
 
         // In memory caches of artist and album data.
         HashMap<String, Long> mArtistCache = new HashMap<String, Long>();
@@ -311,6 +314,23 @@ public class MediaProvider extends ContentProvider {
             @Override
             public void handleMessage(Message msg) {
                 if (msg.what == IMAGE_THUMB) {
+
+                    boolean result = false;
+                    Cursor cursor = query(MediaStore.getMediaScannerUri(),
+                            new String[] { MediaStore.MEDIA_SCANNER_VOLUME }, null, null, null);
+                    if (cursor != null) {
+                        if (cursor.getCount() == 1) {
+                            cursor.moveToFirst();
+                            result = "external".equals(cursor.getString(0));
+                        }
+                        cursor.close();
+                    }
+                    if (result) {
+                        Message newMsg = obtainMessage(IMAGE_THUMB);
+                        newMsg.sendToTarget();
+                        return;
+                    }
+
                     synchronized (mMediaThumbQueue) {
                         mCurrentThumbRequest = mMediaThumbQueue.poll();
                     }
@@ -1210,6 +1230,24 @@ public class MediaProvider extends ContentProvider {
                 uri.getPath().replaceFirst("thumbnails", "media"))
                 .appendPath(origId).build();
 
+        if (cancelRequest && origId.equals("*")) {
+            synchronized (mMediaThumbQueue) {
+                while (mMediaThumbQueue.size() != 0) {
+                    MediaThumbRequest mtq = mMediaThumbQueue.poll();
+                    synchronized (mtq) {
+                        mtq.mState = MediaThumbRequest.State.CANCEL;
+                        mtq.notifyAll();
+                    }
+                    mMediaThumbQueue.remove(mtq);
+                }
+            }
+        }
+
+        if ("video".equals(uri.getPathSegments().get(1))) {
+            Log.w(TAG, "not to create video thumbs.");
+            return false;
+        }
+
         if (needBlocking && !waitForThumbnailReady(origUri)) {
             Log.w(TAG, "original media doesn't exist or it's canceled.");
             return false;
@@ -1775,6 +1813,13 @@ public class MediaProvider extends ContentProvider {
         return numInserted;
     }
 
+    public Bundle call(String method, String request, Bundle args) {
+        if (request == null) {
+            return null;
+        }
+        return null;
+    }
+
     private Uri insertInternal(Uri uri, ContentValues initialValues) {
         long rowId;
         int match = URI_MATCHER.match(uri);
@@ -2083,7 +2128,7 @@ public class MediaProvider extends ContentProvider {
 //            return Environment.getDataDirectory()
 //                + "/" + directoryName + "/" + name + preferredExtension;
         } else {
-            return Environment.getExternalStorageDirectory()
+            return Environment.getFlashStorageDirectory()
                 + "/" + directoryName + "/" + name + preferredExtension;
         }
     }
@@ -2621,84 +2666,6 @@ public class MediaProvider extends ContentProvider {
             compressed = scanner.extractAlbumArt(pfd.getFileDescriptor());
             pfd.close();
 
-            // If no embedded art exists, look for a suitable image file in the
-            // same directory as the media file, except if that directory is
-            // is the root directory of the sd card or the download directory.
-            // We look for, in order of preference:
-            // 0 AlbumArt.jpg
-            // 1 AlbumArt*Large.jpg
-            // 2 Any other jpg image with 'albumart' anywhere in the name
-            // 3 Any other jpg image
-            // 4 any other png image
-            if (compressed == null && path != null) {
-                int lastSlash = path.lastIndexOf('/');
-                if (lastSlash > 0) {
-
-                    String artPath = path.substring(0, lastSlash);
-                    String sdroot = Environment.getExternalStorageDirectory().getAbsolutePath();
-                    String dwndir = Environment.getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS).getAbsolutePath();
-
-                    String bestmatch = null;
-                    synchronized (sFolderArtMap) {
-                        if (sFolderArtMap.containsKey(artPath)) {
-                            bestmatch = sFolderArtMap.get(artPath);
-                        } else if (!artPath.equalsIgnoreCase(sdroot) &&
-                                !artPath.equalsIgnoreCase(dwndir)) {
-                            File dir = new File(artPath);
-                            String [] entrynames = dir.list();
-                            if (entrynames == null) {
-                                return null;
-                            }
-                            bestmatch = null;
-                            int matchlevel = 1000;
-                            for (int i = entrynames.length - 1; i >=0; i--) {
-                                String entry = entrynames[i].toLowerCase();
-                                if (entry.equals("albumart.jpg")) {
-                                    bestmatch = entrynames[i];
-                                    break;
-                                } else if (entry.startsWith("albumart")
-                                        && entry.endsWith("large.jpg")
-                                        && matchlevel > 1) {
-                                    bestmatch = entrynames[i];
-                                    matchlevel = 1;
-                                } else if (entry.contains("albumart")
-                                        && entry.endsWith(".jpg")
-                                        && matchlevel > 2) {
-                                    bestmatch = entrynames[i];
-                                    matchlevel = 2;
-                                } else if (entry.endsWith(".jpg") && matchlevel > 3) {
-                                    bestmatch = entrynames[i];
-                                    matchlevel = 3;
-                                } else if (entry.endsWith(".png") && matchlevel > 4) {
-                                    bestmatch = entrynames[i];
-                                    matchlevel = 4;
-                                }
-                            }
-                            // note that this may insert null if no album art was found
-                            sFolderArtMap.put(artPath, bestmatch);
-                        }
-                    }
-
-                    if (bestmatch != null) {
-                        File file = new File(artPath, bestmatch);
-                        if (file.exists()) {
-                            compressed = new byte[(int)file.length()];
-                            FileInputStream stream = null;
-                            try {
-                                stream = new FileInputStream(file);
-                                stream.read(compressed);
-                            } catch (IOException ex) {
-                                compressed = null;
-                            } finally {
-                                if (stream != null) {
-                                    stream.close();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         } catch (IOException e) {
         }
 
@@ -3060,7 +3027,7 @@ public class MediaProvider extends ContentProvider {
                 if (LOCAL_LOGV) Log.v(TAG, path + " volume ID: " + volumeID);
 
                 // generate database name based on volume ID
-                String dbName = "external-" + Integer.toHexString(volumeID) + ".db";
+                String dbName = "external.db";
                 db = new DatabaseHelper(getContext(), dbName, false);
                 mVolumeId = volumeID;
             } else {
@@ -3308,4 +3275,27 @@ public class MediaProvider extends ContentProvider {
         URI_MATCHER.addURI("media", "*/audio/search/fancy", AUDIO_SEARCH_FANCY);
         URI_MATCHER.addURI("media", "*/audio/search/fancy/*", AUDIO_SEARCH_FANCY);
     }
+
+    private Handler mHandler = new Handler();
+
+    private Runnable mCheckTransaction = new Runnable() {
+        public void run() {
+            if (mDatabases == null)
+                return;
+            boolean finish = true;
+            for (DatabaseHelper database : mDatabases.values()) {
+                if (database.scannerTransaction) {
+                    database.getReadableDatabase().yieldIfContended();
+                    finish = false;
+                }
+            }
+            if (finish) {
+                mHandler.postDelayed(this, 4000);
+            }
+        }
+    };
+
+    final private String BEGIN_TRANSACTION = "BeginTransaction";
+    final private String END_TRANSACTION = "EndTransaction";
+    final private String STATUS_KEY = "StatusKey";
 }
