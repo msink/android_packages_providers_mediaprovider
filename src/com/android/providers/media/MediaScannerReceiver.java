@@ -37,6 +37,7 @@ public class MediaScannerReceiver extends BroadcastReceiver
         Uri uri = intent.getData();
         String externalStoragePath = Environment.getExternalStorageDirectory().getPath();
         String flashStoragePath = Environment.getFlashStorageDirectory().getPath();
+        String hostStoragePath = Environment.getHostStorageDirectory().getPath();
 
         if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
             // scan internal storage
@@ -45,12 +46,14 @@ public class MediaScannerReceiver extends BroadcastReceiver
             if (uri.getScheme().equals("file")) {
                 // handle intents related to external storage
                 String path = uri.getPath();
-                if (action.equals(Intent.ACTION_MEDIA_MOUNTED)) {
+                if (action.equals(Intent.ACTION_MEDIA_MOUNTED) &&
+                        Environment.getFlashStorageState().equals("mounted")) {
                     scan(context, MediaProvider.EXTERNAL_VOLUME);
                 } else if (action.equals(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE) &&
                         path != null && (path.startsWith(externalStoragePath + "/") ||
-                                         path.startsWith(flashStoragePath + "/"))) {
-                    scanFile(context, path);
+                                         path.startsWith(flashStoragePath + "/") ||
+                                         path.startsWith(hostStoragePath + "/"))) {
+                    scan(context, MediaProvider.EXTERNAL_VOLUME);
                 }
             }
         }

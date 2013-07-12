@@ -192,9 +192,11 @@ public class MediaScannerService extends Service implements Runnable
         String volumeName = MediaProvider.INTERNAL_VOLUME;
         String externalStoragePath = Environment.getExternalStorageDirectory().getPath();
         String flashStoragePath = Environment.getFlashStorageDirectory().getPath();
+        String hostStoragePath = Environment.getHostStorageDirectory().getPath();
 
         if (path.startsWith(externalStoragePath) ||
-            path.startsWith(flashStoragePath)) {
+            path.startsWith(flashStoragePath) ||
+            path.startsWith(hostStoragePath)) {
             volumeName = MediaProvider.EXTERNAL_VOLUME;
             openDatabase(volumeName);
         }
@@ -261,6 +263,7 @@ public class MediaScannerService extends Service implements Runnable
                         // scan external storage
                         directories = new String[] {
                                 Environment.getFlashStorageDirectory().getPath(),
+                                Environment.getExternalStorageDirectory().getPath(),
                                 Environment.getHostStorageDirectory().getPath(),
                                 };
                     }

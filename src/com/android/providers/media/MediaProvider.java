@@ -324,6 +324,7 @@ public class MediaProvider extends ContentProvider {
                             result = "external".equals(cursor.getString(0));
                         }
                         cursor.close();
+                        cursor = null;
                     }
                     if (result) {
                         Message newMsg = obtainMessage(IMAGE_THUMB);
@@ -1007,8 +1008,14 @@ public class MediaProvider extends ContentProvider {
         c2.moveToFirst();
         int num1 = c1.getInt(0);
         int num2 = c2.getInt(0);
-        c1.close();
-        c2.close();
+        if (c1 != null) {
+            c1.close();
+            c1 = null;
+        }
+        if (c2 != null) {
+            c2.close();
+            c2 = null;
+        }
         if (num1 != num2) {
             Log.e(TAG, "audio_meta._data column is not unique while upgrading" +
                     " from schema " +fromVersion + " : " + num1 +"/" + num2);
@@ -1192,7 +1199,10 @@ public class MediaProvider extends ContentProvider {
                 }
             }
         }
-        c.close();
+        if (c != null) {
+            c.close();
+            c = null;
+        }
 
         return result;
     }
@@ -1674,6 +1684,7 @@ public class MediaProvider extends ContentProvider {
                 } finally {
                     if (c != null) {
                         c.close();
+                        c = null;
                     }
                 }
                 break;
@@ -1845,7 +1856,7 @@ public class MediaProvider extends ContentProvider {
 
         switch (match) {
             case IMAGES_MEDIA: {
-                ContentValues values = ensureFile(database.mInternal, initialValues, ".jpg", "DCIM/Camera");
+                ContentValues values = ensureFile(database.mInternal, initialValues, ".jpg", ".Cache/Camera");
 
                 values.put(MediaStore.MediaColumns.DATE_ADDED, System.currentTimeMillis() / 1000);
                 String data = values.getAsString(MediaColumns.DATA);
@@ -1867,7 +1878,7 @@ public class MediaProvider extends ContentProvider {
             // This will be triggered by requestMediaThumbnail (see getThumbnailUri)
             case IMAGES_THUMBNAILS: {
                 ContentValues values = ensureFile(database.mInternal, initialValues, ".jpg",
-                        "DCIM/.thumbnails");
+                        ".Cache/.thumbnails");
                 rowId = db.insert("thumbnails", "name", values);
                 if (rowId > 0) {
                     newUri = ContentUris.withAppendedId(Images.Thumbnails.
@@ -1879,7 +1890,7 @@ public class MediaProvider extends ContentProvider {
             // This is currently only used by MICRO_KIND video thumbnail (see getThumbnailUri)
             case VIDEO_THUMBNAILS: {
                 ContentValues values = ensureFile(database.mInternal, initialValues, ".jpg",
-                        "DCIM/.thumbnails");
+                        ".Cache/.thumbnails");
                 rowId = db.insert("videothumbnails", "name", values);
                 if (rowId > 0) {
                     newUri = ContentUris.withAppendedId(Video.Thumbnails.
@@ -2463,6 +2474,7 @@ public class MediaProvider extends ContentProvider {
                                     }
                                 } finally {
                                     c.close();
+                                    c = null;
                                 }
                             }
                         }
@@ -2931,7 +2943,10 @@ public class MediaProvider extends ContentProvider {
                     break;
             }
         } finally {
-            if (c != null) c.close();
+            if (c != null) {
+                c.close();
+                c = null;
+            }
         }
 
         if (cache != null && ! isUnknown) {
@@ -3053,7 +3068,10 @@ public class MediaProvider extends ContentProvider {
                         fileSet.remove(cursor.getString(0));
                     }
                 } finally {
-                    if (cursor != null) cursor.close();
+                    if (cursor != null) {
+                        cursor.close();
+                        cursor = null;
+                    }
                 }
 
                 Iterator<String> iterator = fileSet.iterator();

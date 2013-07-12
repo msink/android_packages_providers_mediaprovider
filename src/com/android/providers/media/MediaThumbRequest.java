@@ -115,7 +115,10 @@ class MediaThumbRequest {
                 return ContentUris.withAppendedId(mThumbUri, c.getLong(0));
             }
         } finally {
-            if (c != null) c.close();
+            if (c != null) {
+                c.close();
+                c = null;
+            }
         }
 
         ContentValues values = new ContentValues(4);
@@ -158,7 +161,10 @@ class MediaThumbRequest {
                 } catch (IOException ex) {
                     // MINI_THUMBNAIL not exists, ignore the exception and generate one.
                 } finally {
-                    if (c != null) c.close();
+                    if (c != null) {
+                        c.close();
+                        c = null;
+                    }
                     if (pfd != null) {
                         pfd.close();
                         return;
