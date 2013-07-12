@@ -341,6 +341,8 @@ public class MediaProvider extends ContentProvider {
                         try {
                             File origFile = new File(mCurrentThumbRequest.mPath);
                             if (origFile.exists() && origFile.length() > 0) {
+                                getContext().sendBroadcast(new Intent(
+                                    "caration.intent.action.hiddenfile.server"));
                                 mCurrentThumbRequest.execute();
                             } else {
                                 // original file hasn't been stored yet
@@ -1064,7 +1066,10 @@ public class MediaProvider extends ContentProvider {
                     db.update(tableName, values, "_id=" + rowId, null);
                 }
             } finally {
-                cursor.close();
+                if (cursor != null) {
+                    cursor.close();
+                    cursor = null;
+                }
             }
             db.setTransactionSuccessful();
         } finally {
@@ -1100,7 +1105,10 @@ public class MediaProvider extends ContentProvider {
                     }
                 }
             } finally {
-                cursor.close();
+                if (cursor != null) {
+                    cursor.close();
+                    cursor = null;
+                }
             }
             db.setTransactionSuccessful();
         } finally {
